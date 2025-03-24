@@ -35,6 +35,33 @@
     fetch(link.href, fetchOpts);
   }
 })();
+const getPopularMovies = async (page = 1) => {
+  const url = `https://api.themoviedb.org/3/movie/popular?language=ko-KR&page=${page}`;
+  const options = {
+    method: "GET",
+    headers: {
+      accept: "application/json",
+      Authorization: `Bearer ${"eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI0N2NlOWYwOTc1NzY1ZjZkYjVmMzhlYWJkYTU3YmY4YyIsIm5iZiI6MTc0MjI2MjUwNi4yNjU5OTk4LCJzdWIiOiI2N2Q4ZDBlYTAwOWVhNjJiZGFlZWEwMDYiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.IaRoj_pm6ULc6XauMWFsROQxyJmjq8M029BDvv0H2Gc"}`
+    }
+  };
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      throw new Error("성공적으로 받아오지 못했습니다.");
+    }
+    const response = await res.json();
+    return response ?? {
+      results: [],
+      page: 1,
+      total_pages: 1,
+      total_results: 0
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(error.message);
+    }
+  }
+};
 const getSearchedMovies = async (searchKeyword, pageNumber = 1) => {
   const query = encodeURIComponent(searchKeyword);
   const url = `https://api.themoviedb.org/3/search/movie?query=${query}&include_adult=false&language=ko-KR&page=${pageNumber}`;
@@ -302,7 +329,7 @@ function $(selector, scope = document) {
   return scope.querySelector(selector);
 }
 const onSearch = async (event) => {
-  var _a;
+  var _a, _b;
   if (!(event.target instanceof HTMLFormElement)) return;
   event.preventDefault();
   try {
@@ -311,8 +338,7 @@ const onSearch = async (event) => {
     if (typeof searchKeyword === "string") {
       const $main = $("main");
       (_a = $(".movie-container")) == null ? void 0 : _a.remove();
-      const $backgroundContainer = $(".background-container");
-      $backgroundContainer == null ? void 0 : $backgroundContainer.remove();
+      (_b = $(".background-container")) == null ? void 0 : _b.remove();
       const $skeleton = skeletonContainer(20);
       $skeleton.prepend(skeletonContainerTitle());
       $main == null ? void 0 : $main.append($skeleton);
@@ -344,25 +370,42 @@ const onSearch = async (event) => {
   }
 };
 const initializeMovie = async () => {
-  throw new Error("initializeMovie에서 에러 발생");
+  const $main = $("main");
+  const $skeleton = skeletonContainer(20);
+  $skeleton.prepend(skeletonContainerTitle());
+  $main == null ? void 0 : $main.append($skeleton);
+  const { results, page, total_pages, total_results } = await getPopularMovies();
+  $skeleton.remove();
+  const loadMoreCallback = async (pageNumber) => await getPopularMovies(pageNumber);
+  const $movieContainer = movieContainer(
+    "지금 인기 있는 영화",
+    { results, total_pages, total_results },
+    loadMoreCallback
+  );
+  $main == null ? void 0 : $main.append($movieContainer);
 };
 const $header = $("header");
 $header == null ? void 0 : $header.append(backgroundContainer);
-initializeMovie().then().catch((error) => {
-  if (error instanceof Error) {
-    const $main = $("main");
-    $main == null ? void 0 : $main.replaceChildren();
-    const $backgroundContainer = $(".background-container");
-    $backgroundContainer == null ? void 0 : $backgroundContainer.remove();
-    const $errorContainer = createElementWithAttributes({
-      tag: "div",
-      className: "error-container",
-      children: [
-        { tag: "h1", textContent: `${error.message} 새로고침 해주세요!` }
-      ]
-    });
-    $main == null ? void 0 : $main.append($errorContainer);
+const main = async () => {
+  try {
+    await initializeMovie();
+    const $searchBar = $("#search-bar-container");
+    $searchBar == null ? void 0 : $searchBar.addEventListener("submit", onSearch);
+  } catch (error) {
+    if (error instanceof Error) {
+      const $main = $("main");
+      $main == null ? void 0 : $main.replaceChildren();
+      const $backgroundContainer = $(".background-container");
+      $backgroundContainer == null ? void 0 : $backgroundContainer.remove();
+      const $errorContainer = createElementWithAttributes({
+        tag: "div",
+        className: "error-container",
+        children: [
+          { tag: "h1", textContent: `${error.message} 새로고침 해주세요!` }
+        ]
+      });
+      $main == null ? void 0 : $main.append($errorContainer);
+    }
   }
-});
-const $searchBar = $("#search-bar-container");
-$searchBar == null ? void 0 : $searchBar.addEventListener("submit", onSearch);
+};
+main();
