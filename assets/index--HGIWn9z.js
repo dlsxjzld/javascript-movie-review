@@ -183,7 +183,7 @@ const backgroundContainer = createElementWithAttributes({
 });
 const noImage = "/javascript-movie-review/images/no_image.png";
 const movieItem = (movie) => {
-  return {
+  return createElementWithAttributes({
     tag: "li",
     className: "item",
     children: [
@@ -220,14 +220,15 @@ const movieItem = (movie) => {
         ]
       }
     ]
-  };
+  });
 };
 const movieList = (movies) => {
   const $movieList = createElementWithAttributes({
     tag: "ul",
-    className: "thumbnail-list",
-    children: movies.map((movie) => movieItem(movie))
+    className: "thumbnail-list"
   });
+  const $movieItems = movies.map((movie) => movieItem(movie));
+  $movieList.append(...$movieItems);
   return $movieList;
 };
 const skeletonContainer = (count) => {
@@ -329,7 +330,7 @@ function $(selector, scope = document) {
   return scope.querySelector(selector);
 }
 const onSearch = async (event) => {
-  var _a, _b;
+  var _a, _b, _c;
   if (!(event.target instanceof HTMLFormElement)) return;
   event.preventDefault();
   try {
@@ -339,6 +340,7 @@ const onSearch = async (event) => {
       const $main = $("main");
       (_a = $(".movie-container")) == null ? void 0 : _a.remove();
       (_b = $(".background-container")) == null ? void 0 : _b.remove();
+      (_c = $(".container")) == null ? void 0 : _c.classList.add("no-background-container");
       const $skeleton = skeletonContainer(20);
       $skeleton.prepend(skeletonContainerTitle());
       $main == null ? void 0 : $main.append($skeleton);
