@@ -299,8 +299,6 @@ const createLocalStorage = (key) => {
   return { getDataFromLocalStorage, setDataToLocalStorage };
 };
 const moviesRatingLocalStorage = createLocalStorage("moviesRate");
-const emptyStar = "/javascript-movie-review/images/star_empty.png";
-const filledStar = "/javascript-movie-review/images/star_filled.png";
 const COMMENTS = {
   2: "최악이예요",
   4: "별로예요",
@@ -308,18 +306,25 @@ const COMMENTS = {
   8: "재미있어요",
   10: "명작이에요"
 };
-const movieRateBox = (movie) => {
-  const $movieRateBox = createElementWithAttributes({
+const getComment = (rate) => {
+  return COMMENTS[rate];
+};
+const getScoresArray = () => {
+  return Object.keys(COMMENTS);
+};
+const movieRateComments = (myMovieRate) => {
+  return createElementWithAttributes({
     tag: "div",
-    className: "movie-rate-box"
+    id: "movie-rate-comments",
+    className: "movie-rate-comments",
+    textContent: `${myMovieRate === 0 ? "별점을 남겨주세요." : `${getComment(myMovieRate)} (${myMovieRate}/10)`}`
   });
-  const $movieRateStars = createElementWithAttributes({
-    tag: "div",
-    className: "movie-rate-stars"
-  });
-  const myMovieRates = moviesRatingLocalStorage.getDataFromLocalStorage() ?? {};
-  const myMovieRate = myMovieRates[movie.id] || 0;
-  Object.keys(COMMENTS).forEach((score, idx) => {
+};
+const emptyStar = "/javascript-movie-review/images/star_empty.png";
+const filledStar = "/javascript-movie-review/images/star_filled.png";
+const starRatingElements = (myMovieRate) => {
+  const $fragment = document.createDocumentFragment();
+  getScoresArray().forEach((score, idx) => {
     const commonId = `rate-check-${idx}`;
     const $label = createElementWithAttributes({
       tag: "label",
@@ -346,25 +351,26 @@ const movieRateBox = (movie) => {
         name: "rate"
       }
     });
-    $movieRateStars.append($label, $input);
+    $fragment.append($label, $input);
   });
-  const $movieRateComments = createElementWithAttributes({
-    tag: "div",
-    id: "movie-rate-comments",
-    className: "movie-rate-comments",
-    textContent: `${myMovieRate === 0 ? "별점을 남겨주세요." : `${COMMENTS[myMovieRate]} (${myMovieRate}/10)`}`
-  });
-  $movieRateStars.addEventListener("click", (event) => {
-    if (event.target instanceof HTMLInputElement === false) {
+  return $fragment;
+};
+const handleMovieRateUpdate = ({
+  movie,
+  $movieRateStars,
+  $movieRateBox
+}) => {
+  return (event) => {
+    if (!(event.target instanceof HTMLInputElement)) {
       return;
     }
-    const myMovieRates2 = moviesRatingLocalStorage.getDataFromLocalStorage() ?? {};
-    const myMovieRate2 = myMovieRates2[movie.id] || 0;
+    const myMovieRates = moviesRatingLocalStorage.getDataFromLocalStorage() ?? {};
+    const myMovieRate = myMovieRates[movie.id] || 0;
     const newMovieRate = Number.parseInt(event.target.value, 10);
-    if (myMovieRate2 === newMovieRate) {
+    if (myMovieRate === newMovieRate) {
       return;
     }
-    const newMovieRates = { ...myMovieRates2, [movie.id]: newMovieRate };
+    const newMovieRates = { ...myMovieRates, [movie.id]: newMovieRate };
     moviesRatingLocalStorage.setDataToLocalStorage(newMovieRates);
     const $images = $movieRateStars.querySelectorAll(".star");
     $images.forEach(($img, idx) => {
@@ -373,26 +379,52 @@ const movieRateBox = (movie) => {
         newMovieRate >= (idx + 1) * 2 ? filledStar : emptyStar
       );
     });
-    const $movieRateComments2 = $movieRateBox.querySelector(
+    const $movieRateComments = $movieRateBox.querySelector(
       "#movie-rate-comments"
     );
-    if (!$movieRateComments2) {
+    if (!$movieRateComments) {
       return;
     }
-    $movieRateComments2.textContent = `${COMMENTS[newMovieRate]} (${newMovieRate}/10)`;
+    $movieRateComments.textContent = `${getComment(
+      newMovieRate
+    )} (${newMovieRate}/10)`;
+  };
+};
+const movieRateStars = (myMovieRate, movie, $movieRateBox) => {
+  const $movieRateStars = createElementWithAttributes({
+    tag: "div",
+    className: "movie-rate-stars"
   });
+  $movieRateStars.append(starRatingElements(myMovieRate));
+  const updateMovieRate = handleMovieRateUpdate({
+    movie,
+    $movieRateStars,
+    $movieRateBox
+  });
+  $movieRateStars.addEventListener("click", updateMovieRate);
+  return $movieRateStars;
+};
+const movieRateBox = (movie) => {
+  const $movieRateBox = createElementWithAttributes({
+    tag: "div",
+    className: "movie-rate-box"
+  });
+  const myMovieRates = moviesRatingLocalStorage.getDataFromLocalStorage() ?? {};
+  const myMovieRate = myMovieRates[movie.id] || 0;
+  const $movieRateStars = movieRateStars(myMovieRate, movie, $movieRateBox);
+  const $movieRateComments = movieRateComments(myMovieRate);
   $movieRateBox.append($movieRateStars, $movieRateComments);
   return $movieRateBox;
 };
-const myMovieRating = (movie) => {
-  const $myMovieRating = createElementWithAttributes({
+const movieRateContainer = (movie) => {
+  const $movieRateContainer = createElementWithAttributes({
     tag: "div",
     className: "movie-rate-container",
     children: [{ tag: "h3", textContent: "내 별점" }]
   });
   const $movieRateBox = movieRateBox(movie);
-  $myMovieRating.append($movieRateBox);
-  return $myMovieRating;
+  $movieRateContainer.append($movieRateBox);
+  return $movieRateContainer;
 };
 const movieDetailOverview = (movie) => {
   const $movieDetailOverview = createElementWithAttributes({
@@ -458,7 +490,7 @@ const movieDetailDescription = (movie) => {
     ]
   });
   $movieDetailDescription.append(
-    myMovieRating(movie),
+    movieRateContainer(movie),
     movieDetailOverview(movie)
   );
   return $movieDetailDescription;
