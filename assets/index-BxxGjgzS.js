@@ -39,13 +39,18 @@ function $(selector, scope = document) {
   if (!selector) throw new Error("No selector provided");
   return scope.querySelector(selector);
 }
+function $$(selector, scope = document) {
+  return scope.querySelectorAll(selector);
+}
 const createElementWithAttributes = ({
   tag,
   id = "",
   className = "",
   attributes = {},
   textContent = "",
-  children = []
+  children = [],
+  onload = () => {
+  }
 }) => {
   const element = document.createElement(tag);
   if (id) {
@@ -66,6 +71,9 @@ const createElementWithAttributes = ({
       (child) => fragment.append(createElementWithAttributes(child))
     );
     element.append(fragment);
+  }
+  if (typeof onload === "function") {
+    element.onload = onload;
   }
   return element;
 };
@@ -105,7 +113,8 @@ const backgroundContainer = () => {
                     tag: "img",
                     className: "star",
                     attributes: {
-                      src: "./images/star_empty.png"
+                      src: "./images/star_empty.png",
+                      alt: "별"
                     }
                   },
                   {
@@ -166,6 +175,48 @@ const showErrorContainer = (error) => {
   }
 };
 const noImage = "/javascript-movie-review/images/no_image.png";
+const placeholderImage = "/javascript-movie-review/images/placeholder_poster.svg";
+const filledStar = "/javascript-movie-review/images/star_filled.png";
+const emptyStar = "/javascript-movie-review/images/star_empty.png";
+const createLocalStorage = (key) => {
+  const myKey = key;
+  const getData = () => {
+    const data = localStorage.getItem(myKey);
+    if (data === null) {
+      return null;
+    }
+    try {
+      return JSON.parse(data);
+    } catch (error) {
+      return null;
+    }
+  };
+  const setData = (data) => {
+    localStorage.setItem(myKey, JSON.stringify(data));
+  };
+  return { getData, setData };
+};
+const moviesRatingLocalStorage = createLocalStorage("moviesRate");
+const checkMovieItemRateStar = (movieId) => {
+  const myMovieRates = moviesRatingLocalStorage.getData() ?? {};
+  const myMovieRate = myMovieRates[movieId] || 0;
+  return myMovieRate > 0 ? filledStar : emptyStar;
+};
+const updateMovieItemRateStar = (movieId) => {
+  const $movieItem = document.getElementById(movieId.toString());
+  if (!$movieItem) {
+    return;
+  }
+  const $rate = $(".rate", $movieItem);
+  if (!$rate) {
+    return;
+  }
+  const $star = $(".star", $rate);
+  if (!$star) {
+    return;
+  }
+  $star.setAttribute("src", checkMovieItemRateStar(movieId));
+};
 const movieItem = (movie) => {
   const $movieItem = createElementWithAttributes({
     tag: "li",
@@ -175,8 +226,14 @@ const movieItem = (movie) => {
       {
         tag: "img",
         className: "thumbnail",
+        onload: function() {
+          if (this instanceof HTMLImageElement === false) {
+            return;
+          }
+          this.src = movie.poster_path === null ? noImage : `https://image.tmdb.org/t/p/w440_and_h660_face${movie.poster_path}`;
+        },
         attributes: {
-          src: movie.poster_path === null ? noImage : `https://image.tmdb.org/t/p/w440_and_h660_face${movie.poster_path}`,
+          src: placeholderImage,
           alt: movie.title
         }
       },
@@ -192,7 +249,8 @@ const movieItem = (movie) => {
                 tag: "img",
                 className: "star",
                 attributes: {
-                  src: `./images/star_empty.png`
+                  src: checkMovieItemRateStar(movie.id),
+                  alt: "별"
                 }
               },
               {
@@ -257,7 +315,11 @@ const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI0N2NlOWYwOTc1NzY1ZjZkYjVmMzhlYWJk
 const isTmdbApiFetchFailResponse = (response) => {
   return typeof response === "object" && response !== null && "success" in response && response.success === false && "status_code" in response && typeof response.status_code === "number";
 };
-const tmdbApi = async (endpoint, method, params = {}) => {
+const tmdbApi = async ({
+  endpoint,
+  method,
+  params = {}
+}) => {
   try {
     const response = await api(BASE_URL, TOKEN, endpoint, method, params);
     if (isTmdbApiFetchFailResponse(response)) {
@@ -275,30 +337,15 @@ const tmdbApi = async (endpoint, method, params = {}) => {
   }
 };
 const fetchMovieDetail = async (id) => {
-  const response = await tmdbApi(`/movie/${id}`, "GET", {
-    language: "ko-KR"
+  const response = await tmdbApi({
+    endpoint: `/movie/${id}`,
+    method: "GET",
+    params: {
+      language: "ko-KR"
+    }
   });
   return response;
 };
-const createLocalStorage = (key) => {
-  const myKey = key;
-  const getDataFromLocalStorage = () => {
-    const data = localStorage.getItem(myKey);
-    if (data === null) {
-      return null;
-    }
-    try {
-      return JSON.parse(data);
-    } catch (error) {
-      return null;
-    }
-  };
-  const setDataToLocalStorage = (data) => {
-    localStorage.setItem(myKey, JSON.stringify(data));
-  };
-  return { getDataFromLocalStorage, setDataToLocalStorage };
-};
-const moviesRatingLocalStorage = createLocalStorage("moviesRate");
 const COMMENTS = {
   2: "최악이예요",
   4: "별로예요",
@@ -309,8 +356,11 @@ const COMMENTS = {
 const getComment = (rate) => {
   return COMMENTS[rate];
 };
-const getScoresArray = () => {
-  return Object.keys(COMMENTS);
+const SCORES = Object.keys(COMMENTS).map(
+  (score) => Number.parseInt(score, 10)
+);
+const isScore = (value) => {
+  return SCORES.includes(value);
 };
 const movieRateComments = (myMovieRate) => {
   return createElementWithAttributes({
@@ -320,11 +370,9 @@ const movieRateComments = (myMovieRate) => {
     textContent: `${myMovieRate === 0 ? "별점을 남겨주세요." : `${getComment(myMovieRate)} (${myMovieRate}/10)`}`
   });
 };
-const emptyStar = "/javascript-movie-review/images/star_empty.png";
-const filledStar = "/javascript-movie-review/images/star_filled.png";
 const starRatingElements = (myMovieRate) => {
   const $fragment = document.createDocumentFragment();
-  getScoresArray().forEach((score, idx) => {
+  SCORES.forEach((score, idx) => {
     const commonId = `rate-check-${idx}`;
     const $label = createElementWithAttributes({
       tag: "label",
@@ -335,7 +383,7 @@ const starRatingElements = (myMovieRate) => {
           id: `rate-img-${idx}`,
           className: "star",
           attributes: {
-            src: myMovieRate >= Number.parseInt(score, 10) ? filledStar : emptyStar,
+            src: myMovieRate >= score ? filledStar : emptyStar,
             alt: `${score}점`
           }
         }
@@ -347,13 +395,46 @@ const starRatingElements = (myMovieRate) => {
       className: "rate-check-input",
       attributes: {
         type: "radio",
-        value: score,
+        value: score.toString(),
         name: "rate"
       }
     });
     $fragment.append($label, $input);
   });
   return $fragment;
+};
+const updateMovieRateComments = ({
+  $movieRateBox,
+  newMovieRate
+}) => {
+  const $movieRateComments = $movieRateBox.querySelector(
+    "#movie-rate-comments"
+  );
+  if (!$movieRateComments) {
+    return;
+  }
+  if (newMovieRate === 0) {
+    return;
+  }
+  $movieRateComments.textContent = `${getComment(
+    newMovieRate
+  )} (${newMovieRate}/10)`;
+};
+const updateMovieRateStars = ({
+  myMovieRates,
+  movie,
+  newMovieRate,
+  $movieRateStars
+}) => {
+  const newMovieRates = { ...myMovieRates, [movie.id]: newMovieRate };
+  moviesRatingLocalStorage.setData(newMovieRates);
+  const $images = $movieRateStars.querySelectorAll(".star");
+  $images.forEach(($img, idx) => {
+    $img.setAttribute(
+      "src",
+      newMovieRate >= (idx + 1) * 2 ? filledStar : emptyStar
+    );
+  });
 };
 const handleMovieRateUpdate = ({
   movie,
@@ -364,33 +445,30 @@ const handleMovieRateUpdate = ({
     if (!(event.target instanceof HTMLInputElement)) {
       return;
     }
-    const myMovieRates = moviesRatingLocalStorage.getDataFromLocalStorage() ?? {};
+    const myMovieRates = moviesRatingLocalStorage.getData() ?? {};
     const myMovieRate = myMovieRates[movie.id] || 0;
     const newMovieRate = Number.parseInt(event.target.value, 10);
     if (myMovieRate === newMovieRate) {
       return;
     }
-    const newMovieRates = { ...myMovieRates, [movie.id]: newMovieRate };
-    moviesRatingLocalStorage.setDataToLocalStorage(newMovieRates);
-    const $images = $movieRateStars.querySelectorAll(".star");
-    $images.forEach(($img, idx) => {
-      $img.setAttribute(
-        "src",
-        newMovieRate >= (idx + 1) * 2 ? filledStar : emptyStar
-      );
-    });
-    const $movieRateComments = $movieRateBox.querySelector(
-      "#movie-rate-comments"
-    );
-    if (!$movieRateComments) {
+    if (isScore(newMovieRate) === false) {
       return;
     }
-    $movieRateComments.textContent = `${getComment(
-      newMovieRate
-    )} (${newMovieRate}/10)`;
+    updateMovieRateStars({
+      myMovieRates,
+      movie,
+      newMovieRate,
+      $movieRateStars
+    });
+    updateMovieRateComments({ $movieRateBox, newMovieRate });
+    updateMovieItemRateStar(movie.id);
   };
 };
-const movieRateStars = (myMovieRate, movie, $movieRateBox) => {
+const movieRateStars = ({
+  myMovieRate,
+  movie,
+  $movieRateBox
+}) => {
   const $movieRateStars = createElementWithAttributes({
     tag: "div",
     className: "movie-rate-stars"
@@ -409,9 +487,9 @@ const movieRateBox = (movie) => {
     tag: "div",
     className: "movie-rate-box"
   });
-  const myMovieRates = moviesRatingLocalStorage.getDataFromLocalStorage() ?? {};
+  const myMovieRates = moviesRatingLocalStorage.getData() ?? {};
   const myMovieRate = myMovieRates[movie.id] || 0;
-  const $movieRateStars = movieRateStars(myMovieRate, movie, $movieRateBox);
+  const $movieRateStars = movieRateStars({ myMovieRate, movie, $movieRateBox });
   const $movieRateComments = movieRateComments(myMovieRate);
   $movieRateBox.append($movieRateStars, $movieRateComments);
   return $movieRateBox;
@@ -474,7 +552,7 @@ const movieDetailDescription = (movie) => {
                   {
                     tag: "img",
                     className: "star",
-                    attributes: { src: "./images/star_filled.png" }
+                    attributes: { src: "./images/star_filled.png", alt: "별" }
                   },
                   {
                     tag: "span",
@@ -507,8 +585,15 @@ const movieDetailInfo = (movie) => {
         children: [
           {
             tag: "img",
+            onload: function() {
+              if (this instanceof HTMLImageElement === false) {
+                return;
+              }
+              this.src = movie.poster_path === null ? noImage : `https://image.tmdb.org/t/p/w440_and_h660_face${movie.poster_path}`;
+            },
             attributes: {
-              src: movie.poster_path === null ? noImage : `https://image.tmdb.org/t/p/w440_and_h660_face${movie.poster_path}`
+              src: placeholderImage,
+              alt: "영화 포스터"
             }
           }
         ]
@@ -539,11 +624,15 @@ const updateMovieDetailModal = async (event) => {
   return true;
 };
 const openMovieDetailInfo = async (event) => {
-  const isUpdateCompleted = await updateMovieDetailModal(event);
-  if (!isUpdateCompleted) {
-    return;
+  try {
+    const isUpdateCompleted = await updateMovieDetailModal(event);
+    if (!isUpdateCompleted) {
+      return;
+    }
+    showMovieDetailModal();
+  } catch (error) {
+    showErrorContainer(error);
   }
-  showMovieDetailModal();
 };
 const movieList = (movies) => {
   const $movieList = createElementWithAttributes({
@@ -555,63 +644,46 @@ const movieList = (movies) => {
   $movieList.addEventListener("click", openMovieDetailInfo);
   return $movieList;
 };
-const hideSkeletonContainer = () => {
-  const $skeleton = $(".skeleton-container");
-  if (!$skeleton) {
-    return;
-  }
-  $skeleton.remove();
-};
-const skeletonContainer = (count) => {
-  const $skeletonContainer = createElementWithAttributes({
-    tag: "section",
-    className: "skeleton-container",
-    children: [
-      {
-        tag: "ul",
-        className: "skeleton-thumbnail-list",
-        children: Array.from({ length: count }, () => ({
-          tag: "li",
-          className: "skeleton-movie",
-          children: [
-            {
-              tag: "div",
-              className: "skeleton skeleton-thumbnail"
-            },
-            {
-              tag: "div",
-              className: "skeleton skeleton-desc"
-            }
-          ]
-        }))
-      }
-    ]
+const skeletonMovieList = (count) => {
+  const $skeletonMovieList = createElementWithAttributes({
+    tag: "ul",
+    className: "skeleton-thumbnail-list",
+    children: Array.from({ length: count }, () => ({
+      tag: "li",
+      className: "skeleton-movie",
+      children: [
+        {
+          tag: "div",
+          className: "skeleton skeleton-thumbnail"
+        },
+        {
+          tag: "div",
+          className: "skeleton skeleton-desc"
+        }
+      ]
+    }))
   });
-  return $skeletonContainer;
+  return $skeletonMovieList;
 };
-const skeletonContainerTitle = () => {
-  return createElementWithAttributes({
-    tag: "p",
-    className: "skeleton-container-title-box",
-    children: [
-      {
-        tag: "h2",
-        className: "skeleton skeleton-container-title"
-      }
-    ]
-  });
-};
-const showSkeletonContainer = ($targetElement, hasSkeletonTitle = false) => {
+const showSkeletonMovieList = ($targetElement) => {
   if (!$targetElement) {
     return;
   }
-  const $skeleton = skeletonContainer(20);
-  if (hasSkeletonTitle) {
-    $skeleton.prepend(skeletonContainerTitle());
-  }
-  $targetElement.append($skeleton);
+  const $skeletonMovieList = skeletonMovieList(20);
+  $targetElement.append(...$skeletonMovieList.children);
 };
-const createObserver = ({ callback, options }) => {
+const hideSkeletonMovieList = () => {
+  const $skeleton = $$(".skeleton-movie");
+  if (!$skeleton) {
+    return;
+  }
+  $skeleton.forEach(($skeletonMovie) => {
+    if ($skeletonMovie) {
+      $skeletonMovie.remove();
+    }
+  });
+};
+const createIntersectionObserver = ({ callback, options }) => {
   let observer = new IntersectionObserver(callback, options);
   const observeTarget = (target) => {
     if (!observer) return;
@@ -632,7 +704,7 @@ const setupSeeMoreMoviesHandler = ({
   $seeMoreButton,
   loadMoreCallback
 }) => {
-  const observer = createObserver({
+  const loadMovieObserver = createIntersectionObserver({
     options: {
       root: document.querySelector(".movie-container"),
       rootMargin: "0px",
@@ -645,22 +717,26 @@ const setupSeeMoreMoviesHandler = ({
       }
     }
   });
-  observer.observeTarget($seeMoreButton);
+  loadMovieObserver.observeTarget($seeMoreButton);
   const MAX_PAGES = 500;
   let pageNumber = 1;
   const seeMoreMovies = async () => {
-    pageNumber += 1;
-    showSkeletonContainer($movieList);
-    const { results, total_pages } = await loadMoreCallback(pageNumber);
-    if (pageNumber === total_pages || pageNumber === MAX_PAGES) {
-      observer.unObserveTarget($seeMoreButton);
-      observer.disconnect();
-      $seeMoreButton.removeEventListener("click", seeMoreMovies);
-      $seeMoreButton.remove();
+    try {
+      pageNumber += 1;
+      showSkeletonMovieList($movieList);
+      const { results, total_pages } = await loadMoreCallback(pageNumber);
+      if (pageNumber === total_pages || pageNumber === MAX_PAGES) {
+        loadMovieObserver.unObserveTarget($seeMoreButton);
+        loadMovieObserver.disconnect();
+        $seeMoreButton.removeEventListener("click", seeMoreMovies);
+        $seeMoreButton.remove();
+      }
+      hideSkeletonMovieList();
+      const $newMovieList = movieList(results);
+      $movieList.append(...$newMovieList.children);
+    } catch (error) {
+      showErrorContainer(error);
     }
-    hideSkeletonContainer();
-    const $newMovieList = movieList(results);
-    $movieList.append(...$newMovieList.children);
   };
 };
 const seeMoreButton = ($movieList, loadMoreCallback) => {
@@ -722,10 +798,51 @@ const movieContainer = ({
   }
   return $movieContainer;
 };
+const hideSkeletonContainer = () => {
+  const $skeleton = $(".skeleton-container");
+  if (!$skeleton) {
+    return;
+  }
+  $skeleton.remove();
+};
+const skeletonContainer = (count) => {
+  const $skeletonContainer = createElementWithAttributes({
+    tag: "section",
+    className: "skeleton-container"
+  });
+  $skeletonContainer.append(skeletonMovieList(count));
+  return $skeletonContainer;
+};
+const skeletonContainerTitle = () => {
+  return createElementWithAttributes({
+    tag: "p",
+    className: "skeleton-container-title-box",
+    children: [
+      {
+        tag: "h2",
+        className: "skeleton skeleton-container-title"
+      }
+    ]
+  });
+};
+const showSkeletonContainer = ($targetElement, hasSkeletonTitle = false) => {
+  if (!$targetElement) {
+    return;
+  }
+  const $skeleton = skeletonContainer(20);
+  if (hasSkeletonTitle) {
+    $skeleton.prepend(skeletonContainerTitle());
+  }
+  $targetElement.append($skeleton);
+};
 const fetchPopularMovies = async (page = 1) => {
-  const response = await tmdbApi("/movie/popular", "GET", {
-    language: "ko-KR",
-    page
+  const response = await tmdbApi({
+    endpoint: "/movie/popular",
+    method: "GET",
+    params: {
+      language: "ko-KR",
+      page
+    }
   });
   return response;
 };
@@ -746,10 +863,14 @@ const initializeMovie = async () => {
   hideSkeletonContainer();
 };
 const fetchSearchedMovies = async (searchKeyword, page = 1) => {
-  const response = await tmdbApi("/search/movie", "GET", {
-    language: "ko-KR",
-    page,
-    query: searchKeyword
+  const response = await tmdbApi({
+    endpoint: "/search/movie",
+    method: "GET",
+    params: {
+      language: "ko-KR",
+      page,
+      query: searchKeyword
+    }
   });
   return response;
 };
@@ -828,6 +949,50 @@ const initializeCloseMovieDetailModal = () => {
   addCloseEventOnModalBackground();
   addCloseEventOnModalButton();
 };
+const scrollToBottom = () => {
+  const $scrollToBottom = createElementWithAttributes({
+    tag: "button",
+    className: "scroll-to-bottom",
+    textContent: "⬇"
+  });
+  $scrollToBottom.addEventListener("click", () => {
+    const $movieContainer = $(".movie-container");
+    if (!$movieContainer) {
+      return;
+    }
+    window.scrollTo({
+      top: $movieContainer.scrollHeight * 0.85,
+      behavior: "smooth"
+    });
+  });
+  return $scrollToBottom;
+};
+const scrollToTop = () => {
+  const $scrollButton = createElementWithAttributes({
+    tag: "button",
+    className: "scroll-to-top",
+    textContent: "⬆"
+  });
+  $scrollButton.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  return $scrollButton;
+};
+const scrollBox = () => {
+  const $scrollBox = createElementWithAttributes({
+    tag: "div",
+    className: "scroll-box"
+  });
+  $scrollBox.append(scrollToTop(), scrollToBottom());
+  return $scrollBox;
+};
+const showScrollBox = () => {
+  const $target = $("body");
+  if (!$target) {
+    return;
+  }
+  $target.append(scrollBox());
+};
 const main = async () => {
   try {
     const $header = $("header");
@@ -836,6 +1001,7 @@ const main = async () => {
     const $searchBar = $("#search-bar-container");
     $searchBar == null ? void 0 : $searchBar.addEventListener("submit", searchMovie);
     initializeCloseMovieDetailModal();
+    showScrollBox();
   } catch (error) {
     showErrorContainer(error);
   }
